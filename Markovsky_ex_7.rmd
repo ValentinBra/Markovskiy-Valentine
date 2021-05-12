@@ -1,0 +1,379 @@
+---
+title: "Упражнение № 7"
+author: "Марковский Валентин"
+date: "20 04 2021"
+output: html_document
+---
+
+Необходимо построить две модели:
+
+- зависимости непрерывного отклика от одного непрерывного предиктора; 
+- зависимости вероятности (логит) от одного непрерывного предиктора.
+
+
+Для каждой модели:
+
+1 Указать смысл переменных модели, метод оценки и настроечный параметр (степень полинома, гиперпараметр λ, ширина окна s, число узлов – в зависимости от метода).
+
+2 Подогнать модель на всех наблюдениях, меняя значение настроечного параметра.
+
+3 Обосновать оптимальное значение настроечного параметра подходящим методом (кросс-валидация, ANOVA).
+
+4 Сделать прогноз на обучающую выборку по лучшей модели: модельные значения и ошибки прогноза.
+
+5 Построить график с фактическими наблюдениями, модельной кривой и 95% доверительными интервалами прогноза.
+
+В таблице ниже указаны набор данных, столбцы с переменными для модели и метод подгонки.
+
+
+## Вариант № 29 (11)
+
+Модели: Полиномиальный сплайн.
+
+Данные: *Auto {ISLR}*.
+
+```{r setup, include=FALSE}
+
+library('ISLR')              # набор данных Auto
+library('splines')           # сплайны
+library('gam')               # обобщённые аддитивные модели
+library('akima')             # график двумерной плоскости
+library('ggplot2')           # красивые графики
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Работаем с набором данных по расходу бензина, лошадиной силе и другой информация для 392 автомобилей. Присоединяем его к пространству имён функцией attach(), и дальше обращаемся напрямую к столбцам таблицы
+
+```{r}
+# загрузка данных Auto
+data('Auto')
+
+#?Auto
+
+# ядро
+my.seed <- 1
+attach(Auto)
+```
+
+Работаем со столбцами:
+
+- *displacement* – Объем двигателя (куб. дюймов);
+- *weight* – Масса автомобиля (кг.).
+
+# Полиномиальный сплайн
+
+Судя по графику ниже, взаимосвязь объема двигателя и времени ускорения нелинейна. Наблюдается также группа наблюдений с высоким значением displacement, граница проходит примерно на уровне 280.
+
+```{r}
+gp <- ggplot(data = Auto, aes(x = weight, y = displacement))
+gp <- gp + geom_point() + geom_abline(slope = 0, intercept = 280, col = 'red')
+gp
+```
+
+## Сплайны
+
+# Зависимость объема двигателя от массы автомобиля (модель 1)
+
+Построим кубический сплайн с тремя узлами.
+
+```{r}
+# границы изменения переменной w
+weightlims <- range(weight)
+
+# значения w, для которых делаем прогноз (от min до max с шагом 1)
+weight.grid <- seq(from = weightlims[1], to = weightlims[2], length = 100)
+
+# кубический сплайн с тремя узлами
+fit <- lm(displacement ~ bs(weight, knots = c(25, 40, 60)), data = Auto)
+# прогноз
+preds.spl <- predict(fit, newdata = list(weight = weight.grid), se = T)
+```
+Теперь построим натуральный по трём узлам. Три узла это 6 степеней свободы. Если функции bs(), которая создаёт матрицу с базисом для полиномиального сплайна, передать только степени свободы, она распределит узлы равномерно. В данном случае это квартили распределения *w*.
+
+```{r}
+
+# 3 узла -- 6 степеней свободы (столбцы матрицы)
+dim(bs(weight, knots = c(25, 40, 60)))
+
+# если не указываем узлы явно...
+dim(bs(weight, df = 6))
+
+#  они привязываются к квартилям
+attr(bs(weight, df = 6), 'knots')
+
+# натуральный сплайн
+#fit2 <- lm(displacement ~ ns(weight, df = 4), data = Auto)
+
+#preds.spl2 <- predict(fit2, newdata = list(weight = weight.grid), se = T)
+
+#График сравнения кубического и натурального сплайнов.
+
+par(mfrow = c(1, 1), mar = c(4.5, 4.5, 1, 8.5), oma = c(0, 0, 0, 0), xpd = T)
+
+# наблюдения
+plot(weight, displacement, col = 'grey')
+
+# модель кубического сплайна
+lines(weight.grid, preds.spl$fit, lwd = 2)
+
+# доверительный интервал
+lines(weight.grid, preds.spl$fit + 2*preds.spl$se, lty = 'dashed')
+lines(weight.grid, preds.spl$fit - 2*preds.spl$se, lty = 'dashed')
+
+# натуральный сплайн
+#lines(weight.grid, preds.spl2$fit, col = 'red', lwd = 2)
+
+# легенда
+legend("topright", inset = c(-0.35555, 0),
+       c('Кубический \n с 3 узлами'),
+       lwd = rep(2, 2), col = c('black'))
+
+# заголовок
+title("Сплайны")
+
+```
+
+
+Подгоняем полином пятой степени для зависимости заработной платы от возраста
+
+```{r}
+fit <- lm(displacement ~ poly(weight, 5), data = Auto)
+round(coef(summary(fit)), 2)
+```
+
+Функция poly(weight, 5) создаёт таблицу с базисом ортогональных полиномов: линейные комбинации значений переменной weight в степенях от 1 до 5.
+
+```{r}
+round(head(poly(weight, 5)), 3)
+```
+
+можно получить сами значения weight в заданных степенях
+
+```{r}
+round(head(poly(weight, 5, raw = T)), 3)
+
+# на прогноз не повлияет, но оценки параметров изменяются
+fit.2 <- lm(displacement ~ poly(weight, 5, raw = T), data = Auto)
+round(coef(summary(fit.2)), 2)
+
+# границы изменения переменной weight
+weightlims <- range(weight)
+
+# значения weight, для которых делаем прогноз (от min до max с шагом 1)
+weight.grid <- seq(from = weightlims[1], to = weightlims[2], length = 100)
+
+# рассчитать прогнозы и их стандартные ошибки
+preds <- predict(fit, newdata = list(weight = weight.grid), se = T)
+
+# границы доверительного интервала для заработной платы
+se.bands <- cbind(lower.bound = preds$fit - 2*preds$se.fit,
+                  upper.bound = preds$fit + 2*preds$se.fit)
+
+# смотрим результат
+round(head(se.bands), 2)
+```
+
+
+Убедимся, что прогнозы по моделям с различными вызовами poly() совпадают
+и подбираем степень полинома, сравнивая модели со степенями от 1 до 5 с помощью дисперсионного анализа (ANOVA)
+
+```{r}
+# прогнозы по второму вызову модели
+preds2 <- predict(fit.2, newdata = list(weight = weight.grid), se = T)
+
+# максимальное расхождение между прогнозами по двум вариантам вызова модели
+max(abs(preds$fit - preds2$fit))
+
+fit.1 <- lm(displacement ~ weight, data = Auto)
+fit.2 <- lm(displacement ~ poly(weight, 2), data = Auto)
+fit.3 <- lm(displacement ~ poly(weight, 3), data = Auto)
+fit.4 <- lm(displacement ~ poly(weight, 4), data = Auto)
+fit.5 <- lm(displacement ~ poly(weight, 5), data = Auto)
+
+round(anova(fit.1, fit.2, fit.3, fit.4, fit.5), 2)
+```
+
+```{r}
+# Лучшая модель 
+best.fit.1 <- fit.1
+```
+
+
+Рассматриваются пять моделей, в которых степени полинома от *weight* идут по возрастанию. В крайнем правом столбце таблице приводятся p-значения для проверки нулевой гипотезы: текущая модель не даёт статистически значимого сокращения *RSS* по сравнению с предыдущей моделью. Можно сделать вывод, что степени 1 достаточно, дальнейшее увеличение степени не даёт значимого улучшения качества модели.
+
+Прогноз на обучающую выборку по лучшей модели (модель 1)
+
+```{r}
+# прогноз по лучшей модели
+preds <- predict(best.fit.1, data.frame(weight = weight.grid), se = T)
+
+# границы доверительного интервала для площади нерозничных торговых площадей
+se.bands <- cbind(lower.bound = preds$fit - 2*preds$se.fit,
+                  upper.bound = preds$fit + 2*preds$se.fit)
+
+# смотрим результат
+round(head(se.bands), 2)
+
+# Стандартные ошибки
+round(preds$se.fit, 2)
+```
+
+
+## График с фактическими наблюдениями, модельной кривой и 95% доверительными интервалами прогноза (модель 1)
+
+```{r}
+# сетка для графика
+plot(weight, displacement, xlim = weightlims, type = 'n', ylab = 'P(displacement | weight)')
+
+# фактические наблюдения показываем засечками
+points(jitter(weight), displacement, cex = 0.5, pch = '|', col = 'darkgrey')
+
+pfit <- preds$fit
+
+# модель
+lines(weight.grid, pfit, lwd = 2, col = 'blue')
+
+# доверительные интервалы
+matlines(weight.grid, se.bands, lwd = 1, col = 'blue', lty = 3)
+
+# заголовок
+title('Сплайн (модель 1)')
+```
+
+
+Зависимость объема двигателя > 280 от массы автомобиля (модель 2)
+
+```{r}
+# график
+plot(weight, I(displacement>280), xlim = weightlims, cex = 0.5, col = 'darkgrey')
+
+# подгоняем модель c окном 0.2
+fit3 <- loess(I(displacement>280) ~ weight, cv = 0.2, data = Auto)
+
+# подгоняем модель c окном 0.7
+fit4 <- loess(I(displacement>280) ~ weight, span = 0.7, data = Auto)
+
+# рисум модели
+lines(weight.grid, predict(fit3, data.frame(weight = weight.grid)),
+      col = 'red', lwd = 2)
+lines(weight.grid, predict(fit4, data.frame(weight = weight.grid)),
+      col = 'blue', lwd = 2)
+
+
+title('Сплайн')
+```
+
+## Определение оптимального настроечного параметра (модель 2)
+
+
+```{r}
+
+fit <- lm(displacement ~ poly(weight, 5), data = Auto)
+round(coef(summary(fit)), 2)
+
+round(head(poly(weight, 5)), 3)
+
+round(head(poly(weight, 5, raw = T)), 3)
+
+# на прогноз не повлияет, но оценки параметров изменяются
+fit.2 <- lm(displacement ~ poly(weight, 5, raw = T), data = Auto)
+round(coef(summary(fit.2)), 2)
+
+# границы изменения переменной weight
+weightlims <- range(weight)
+
+# значения weight, для которых делаем прогноз (от min до max с шагом 1)
+weight.grid <- seq(from = weightlims[1], to = weightlims[2], length = 100)
+
+# рассчитать прогнозы и их стандартные ошибки
+preds <- predict(fit, newdata = list(weight = weight.grid), se = T)
+
+# границы доверительного интервала для заработной платы
+se.bands <- cbind(lower.bound = preds$fit - 2*preds$se.fit,
+                  upper.bound = preds$fit + 2*preds$se.fit)
+
+# смотрим результат
+round(head(se.bands), 2)
+```
+
+
+Убедимся, что прогнозы по моделям с различными вызовами poly() совпадают
+и подбираем степень полинома, сравнивая модели со степенями от 1 до 5 с помощью дисперсионного анализа (ANOVA)
+
+```{r}
+# прогнозы по второму вызову модели
+preds2 <- predict(fit.2, newdata = list(weight = weight.grid), se = T)
+
+# максимальное расхождение между прогнозами по двум вариантам вызова модели
+max(abs(preds$fit - preds2$fit))
+
+fit.1 <- lm(I(displacement>280) ~ weight, data = Auto)
+fit.2 <- lm(I(displacement>280) ~ poly(weight, 2), data = Auto)
+fit.3 <- lm(I(displacement>280) ~ poly(weight, 3), data = Auto)
+fit.4 <- lm(I(displacement>280) ~ poly(weight, 4), data = Auto)
+fit.5 <- lm(I(displacement>280) ~ poly(weight, 5), data = Auto)
+
+round(anova(fit.1, fit.2, fit.3, fit.4, fit.5), 2)
+```
+
+```{r}
+# Лучшая модель 
+best.fit.2 <- fit.4
+```
+
+## Прогноз на обучающую выборку по лучшей модели (модель 2)
+
+```{r}
+
+# Прогноз по лучшей модели
+preds <- predict(best.fit.2, data.frame(weight = weight.grid), se = T)
+
+# Границы доверительного интервала для площади нерозничных торговых площадей
+se.bands <- cbind(lower.bound = preds$fit - 2*preds$se.fit,
+                  upper.bound = preds$fit + 2*preds$se.fit)
+
+# Смотрим результат
+round(head(se.bands), 2)
+
+
+# Стандартные ошибки
+round(preds$se.fit, 2)
+```
+
+## График с фактическими наблюдениями, модельной кривой и 95% доверительными интервалами прогноза (модель 2)
+
+```{r}
+# Сетка для графика
+plot(weight, I(displacement > 280), xlim = weightlims, type = 'n', ylim = c(-0.35, 1.5),
+     ylab = 'P(displacement > 280 | weight)')
+
+# Фактические наблюдения показываем засечки
+points(jitter(weight), I((displacement > 280) / 5), cex = 0.5, pch = '|', col = 'darkgrey')
+
+pfit <- preds$fit
+# Модель
+lines(weight.grid, pfit, lwd = 2, col = 'darkgreen')
+
+# Доверительные интервалы
+matlines(weight.grid, se.bands, lwd = 1, col = 'darkgreen', lty = 3)
+
+# Заголовок
+title('сплайны')
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
