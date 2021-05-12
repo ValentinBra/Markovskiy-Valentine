@@ -1,7 +1,7 @@
 ---
 title: "Упражнение № 7"
 author: "Марковский Валентин"
-date: "20 04 2021"
+date: "12 05 2021"
 output: html_document
 ---
 
